@@ -137,12 +137,11 @@ class BroadcasterViewModel: ObservableObject {
         }
     }
     
-    func canEnableBeacon(_ beacon: Beacon) -> Bool {
-        if beacon.isEnabled {
-            return true // Can always disable
+    func toggleFavorite(_ beacon: Beacon) {
+        if let index = beacons.firstIndex(where: { $0.id == beacon.id }) {
+            beacons[index].isFavorite.toggle()
+            saveBeacons()
         }
-        let enabledCount = beacons.filter { $0.isEnabled }.count
-        return enabledCount < 2
     }
     
     private func showToastMessage(_ message: String) {
@@ -152,14 +151,6 @@ class BroadcasterViewModel: ObservableObject {
         // Auto-hide after 3 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             self.showToast = false
-        }
-    }
-    
-    func toggleBroadcasting() {
-        if isAdvertising {
-            stopAllBroadcasting()
-        } else {
-            startAllBroadcasting()
         }
     }
     
@@ -242,24 +233,6 @@ class BroadcasterViewModel: ObservableObject {
         } else {
             statusMessage = "Ready"
         }
-    }
-    
-    private func startBroadcasting() {
-        guard let uuid = UUID(uuidString: uuidString) else {
-            return
-        }
-        
-        broadcaster.startBroadcastingBeacon(
-            id: UUID(),
-            uuid: uuid,
-            major: major,
-            minor: minor,
-            measuredPower: measuredPower
-        )
-    }
-    
-    private func stopBroadcasting() {
-        broadcaster.stopAllBroadcasting()
     }
     
     private func setupObservers() {

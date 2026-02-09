@@ -15,6 +15,7 @@ struct Beacon: Identifiable, Codable {
     var minor: UInt16
     var measuredPower: Int8
     var isEnabled: Bool
+    var isFavorite: Bool
     
     init(
         id: UUID = UUID(),
@@ -23,7 +24,8 @@ struct Beacon: Identifiable, Codable {
         major: UInt16 = 1,
         minor: UInt16 = 1,
         measuredPower: Int8 = -59,
-        isEnabled: Bool = true
+        isEnabled: Bool = true,
+        isFavorite: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -32,6 +34,7 @@ struct Beacon: Identifiable, Codable {
         self.minor = minor
         self.measuredPower = measuredPower
         self.isEnabled = isEnabled
+        self.isFavorite = isFavorite
     }
     
     var beaconUUID: UUID? {
