@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import CoreBluetooth
+import Combine
 
 class BroadcasterViewModel: ObservableObject {
     
@@ -16,6 +17,9 @@ class BroadcasterViewModel: ObservableObject {
     @Published var major: UInt16
     @Published var minor: UInt16
     @Published var measuredPower: Int8
+    @Published var isAdvertising: Bool = false
+    @Published var statusMessage: String = "Ready"
+    @Published var bluetoothState: CBManagerState = .unknown
     
     // MARK: - Private Properties
     @AppStorage("savedUUID") private var savedUUID: String?
@@ -25,18 +29,11 @@ class BroadcasterViewModel: ObservableObject {
     
     private let broadcaster = BeaconBroadcaster()
     private var shouldRestartAfterSleep = false
+    private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Computed Properties
-    var isAdvertising: Bool {
-        broadcaster.isAdvertising
-    }
-    
-    var statusMessage: String {
-        broadcaster.statusMessage
-    }
-    
     var canStartBroadcasting: Bool {
-        broadcaster.bluetoothState == .poweredOn && !isAdvertising
+        bluetoothState == .poweredOn && !isAdvertising
     }
     
     // MARK: - Formatters
@@ -64,13 +61,32 @@ class BroadcasterViewModel: ObservableObject {
         self.minor = 0
         self.measuredPower = -59
         
-        // Then load saved values
+        // Then load saved values with safe conversions
         self.uuidString = savedUUID ?? UUID().uuidString
-        self.major = UInt16(savedMajor ?? 1)
-        self.minor = UInt16(savedMinor ?? 1)
-        self.measuredPower = Int8(savedPower ?? -59)
+        
+        // Safe conversion for major - clamp to UInt16 range
+        if let savedMajorValue = savedMajor {
+            self.major = UInt16(clamping: savedMajorValue)
+        } else {
+            self.major = 1
+        }
+        
+        // Safe conversion for minor - clamp to UInt16 range
+        if let savedMinorValue = savedMinor {
+            self.minor = UInt16(clamping: savedMinorValue)
+        } else {
+            self.minor = 1
+        }
+        
+        // Safe conversion for measured power - clamp to Int8 range
+        if let savedPowerValue = savedPower {
+            self.measuredPower = Int8(clamping: savedPowerValue)
+        } else {
+            self.measuredPower = -59
+        }
         
         setupObservers()
+        setupBroadcasterBindings()
     }
     
     // MARK: - Public Methods
@@ -134,6 +150,18 @@ class BroadcasterViewModel: ObservableObject {
             name: NSWorkspace.didWakeNotification,
             object: nil
         )
+    }
+    
+    private func setupBroadcasterBindings() {
+        // Bind broadcaster's published properties to our published properties
+        broadcaster.$isAdvertising
+            .assign(to: &$isAdvertising)
+        
+        broadcaster.$statusMessage
+            .assign(to: &$statusMessage)
+        
+        broadcaster.$bluetoothState
+            .assign(to: &$bluetoothState)
     }
     
     @objc private func handleSleepNotification() {

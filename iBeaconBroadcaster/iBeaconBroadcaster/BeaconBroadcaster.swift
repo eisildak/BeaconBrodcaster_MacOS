@@ -19,7 +19,7 @@ class BeaconBroadcaster: NSObject, ObservableObject {
     
     // MARK: - Private Properties
     private var peripheralManager: CBPeripheralManager?
-    private var currentBeaconData: [String: Any]?
+    private var currentBeaconData: [String: Data]?
     
     // MARK: - Initialization
     override init() {
@@ -65,31 +65,33 @@ class BeaconBroadcaster: NSObject, ObservableObject {
         major: UInt16,
         minor: UInt16,
         measuredPower: Int8
-    ) -> [String: Any] {
+    ) -> [String: Data] {
         
-        // iBeacon data format: 21 bytes
-        var advertisementBytes = [UInt8](repeating: 0, count: 21)
+        let beaconKey = "kCBAdvDataAppleBeaconKey"
+        
+        // Create 21-byte iBeacon advertisement data
+        var advBytes = [UInt8](repeating: 0, count: 21)
         
         // Bytes 0-15: Proximity UUID
         let uuidBytes = withUnsafeBytes(of: uuid.uuid) { Array($0) }
-        advertisementBytes[0..<16] = uuidBytes[0..<16]
+        for i in 0..<16 {
+            advBytes[i] = uuidBytes[i]
+        }
         
-        // Bytes 16-17: Major value (big-endian)
-        advertisementBytes[16] = UInt8((major >> 8) & 0xFF)
-        advertisementBytes[17] = UInt8(major & 0xFF)
+        // Bytes 16-17: Major (big-endian)
+        advBytes[16] = UInt8((major >> 8) & 0xFF)
+        advBytes[17] = UInt8(major & 0xFF)
         
-        // Bytes 18-19: Minor value (big-endian)
-        advertisementBytes[18] = UInt8((minor >> 8) & 0xFF)
-        advertisementBytes[19] = UInt8(minor & 0xFF)
+        // Bytes 18-19: Minor (big-endian)
+        advBytes[18] = UInt8((minor >> 8) & 0xFF)
+        advBytes[19] = UInt8(minor & 0xFF)
         
-        // Byte 20: Measured power (signed Int8)
-        advertisementBytes[20] = UInt8(bitPattern: measuredPower)
+        // Byte 20: Measured Power
+        advBytes[20] = UInt8(bitPattern: measuredPower)
         
-        let advertisementData = Data(advertisementBytes)
+        let advData = Data(advBytes)
         
-        return [
-            "kCBAdvDataAppleBeaconKey": advertisementData
-        ]
+        return [beaconKey: advData]
     }
 }
 

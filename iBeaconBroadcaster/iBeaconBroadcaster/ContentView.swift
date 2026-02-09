@@ -17,6 +17,7 @@ struct ContentView: View {
                 TextField("UUID", text: $viewModel.uuidString)
                     .textFieldStyle(.roundedBorder)
                     .disabled(viewModel.isAdvertising)
+                    .onSubmit { }
                 
                 Button(action: viewModel.generateNewUUID) {
                     Image(systemName: "arrow.clockwise")
@@ -39,6 +40,7 @@ struct ContentView: View {
             )
             .textFieldStyle(.roundedBorder)
             .disabled(viewModel.isAdvertising)
+            .onSubmit { }
             
             // Minor Value
             TextField(
@@ -48,6 +50,7 @@ struct ContentView: View {
             )
             .textFieldStyle(.roundedBorder)
             .disabled(viewModel.isAdvertising)
+            .onSubmit { }
             
             // Measured Power
             TextField(
@@ -57,6 +60,7 @@ struct ContentView: View {
             )
             .textFieldStyle(.roundedBorder)
             .disabled(viewModel.isAdvertising)
+            .onSubmit { }
             
             // Status Message
             Text(viewModel.statusMessage)
@@ -72,6 +76,7 @@ struct ContentView: View {
                     Spacer()
                 }
             }
+            .buttonStyle(.borderedProminent)
             .disabled(!viewModel.canStartBroadcasting && !viewModel.isAdvertising)
             .controlSize(.large)
         }
