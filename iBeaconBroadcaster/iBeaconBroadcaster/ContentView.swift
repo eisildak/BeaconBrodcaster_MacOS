@@ -43,7 +43,7 @@ struct ContentView: View {
                         .frame(width: 32, height: 32)
                         .cornerRadius(8)
                     
-                    Text("Beacon Broadcaster Pro")
+                    Text("Beacon Broadcaster Desktop")
                         .font(.title3)
                         .fontWeight(.bold)
                     
@@ -423,7 +423,7 @@ struct InfoSheet: View {
                     .foregroundColor(.secondary)
                     .padding(.top, 24)
                 
-                Text("Beacon Broadcaster Pro")
+                Text("Beacon Broadcaster Desktop")
                     .font(.title2)
                     .fontWeight(.bold)
                     .padding(.bottom, 20)

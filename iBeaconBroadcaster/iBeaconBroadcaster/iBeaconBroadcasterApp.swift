@@ -13,7 +13,7 @@ struct iBeaconBroadcasterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        WindowGroup("Beacon Broadcaster Pro Desktop") {
+        WindowGroup("Beacon Broadcaster Desktop") {
             ContentView()
                 .onAppear {
                     NSWindow.allowsAutomaticWindowTabbing = false
