@@ -13,19 +13,21 @@ import Combine
 class BroadcasterViewModel: ObservableObject {
     
     // MARK: - Published Properties
+    @Published var beacons: [Beacon] = []
     @Published var uuidString: String
     @Published var major: UInt16
     @Published var minor: UInt16
     @Published var measuredPower: Int8
+    @Published var beaconName: String = ""
     @Published var isAdvertising: Bool = false
     @Published var statusMessage: String = "Ready"
     @Published var bluetoothState: CBManagerState = .unknown
+    @Published var currentBroadcastingBeaconId: UUID?
+    @Published var showToast: Bool = false
+    @Published var toastMessage: String = ""
     
     // MARK: - Private Properties
-    @AppStorage("savedUUID") private var savedUUID: String?
-    @AppStorage("savedMajor") private var savedMajor: Int?
-    @AppStorage("savedMinor") private var savedMinor: Int?
-    @AppStorage("savedPower") private var savedPower: Int?
+    @AppStorage("savedBeacons") private var savedBeaconsData: Data?
     
     private let broadcaster = BeaconBroadcaster()
     private var shouldRestartAfterSleep = false
@@ -34,6 +36,10 @@ class BroadcasterViewModel: ObservableObject {
     // MARK: - Computed Properties
     var canStartBroadcasting: Bool {
         bluetoothState == .poweredOn && !isAdvertising
+    }
+    
+    var canAddBeacon: Bool {
+        UUID(uuidString: uuidString) != nil
     }
     
     // MARK: - Formatters
@@ -56,34 +62,13 @@ class BroadcasterViewModel: ObservableObject {
     // MARK: - Initialization
     init() {
         // Initialize stored properties first
-        self.uuidString = ""
-        self.major = 0
-        self.minor = 0
+        self.uuidString = UUID().uuidString
+        self.major = 1
+        self.minor = 1
         self.measuredPower = -59
         
-        // Then load saved values with safe conversions
-        self.uuidString = savedUUID ?? UUID().uuidString
-        
-        // Safe conversion for major - clamp to UInt16 range
-        if let savedMajorValue = savedMajor {
-            self.major = UInt16(clamping: savedMajorValue)
-        } else {
-            self.major = 1
-        }
-        
-        // Safe conversion for minor - clamp to UInt16 range
-        if let savedMinorValue = savedMinor {
-            self.minor = UInt16(clamping: savedMinorValue)
-        } else {
-            self.minor = 1
-        }
-        
-        // Safe conversion for measured power - clamp to Int8 range
-        if let savedPowerValue = savedPower {
-            self.measuredPower = Int8(clamping: savedPowerValue)
-        } else {
-            self.measuredPower = -59
-        }
+        // Load saved beacons
+        loadBeacons()
         
         setupObservers()
         setupBroadcasterBindings()
@@ -91,11 +76,90 @@ class BroadcasterViewModel: ObservableObject {
     
     // MARK: - Public Methods
     
+    func addBeacon() {
+        guard let uuid = UUID(uuidString: uuidString) else {
+            return
+        }
+        
+        let newBeacon = Beacon(
+            name: beaconName.isEmpty ? "Beacon \(beacons.count + 1)" : beaconName,
+            uuidString: uuid.uuidString,
+            major: major,
+            minor: minor,
+            measuredPower: measuredPower,
+            isEnabled: false
+        )
+        
+        beacons.append(newBeacon)
+        saveBeacons()
+        
+        // Reset form
+        generateNewUUID()
+        beaconName = ""
+        major = 1
+        minor = 1
+        measuredPower = -59
+    }
+    
+    func removeBeacon(_ beacon: Beacon) {
+        if beacon.isEnabled && isAdvertising {
+            broadcaster.stopBroadcastingBeacon(id: beacon.id)
+        }
+        beacons.removeAll { $0.id == beacon.id }
+        saveBeacons()
+        updateBroadcastingState()
+    }
+    
+    func toggleBeacon(_ beacon: Beacon) {
+        if let index = beacons.firstIndex(where: { $0.id == beacon.id }) {
+            // Check if we're trying to enable a beacon
+            if !beacons[index].isEnabled {
+                // Count currently enabled beacons
+                let enabledCount = beacons.filter { $0.isEnabled }.count
+                
+                // Don't allow more than 2 active beacons
+                if enabledCount >= 2 {
+                    showToastMessage("You can only broadcast 2 beacons at the same time!")
+                    return
+                }
+            }
+            
+            beacons[index].isEnabled.toggle()
+            
+            if beacons[index].isEnabled {
+                startBroadcastingBeacon(beacons[index])
+            } else {
+                broadcaster.stopBroadcastingBeacon(id: beacon.id)
+                updateBroadcastingState()
+            }
+            
+            saveBeacons()
+        }
+    }
+    
+    func canEnableBeacon(_ beacon: Beacon) -> Bool {
+        if beacon.isEnabled {
+            return true // Can always disable
+        }
+        let enabledCount = beacons.filter { $0.isEnabled }.count
+        return enabledCount < 2
+    }
+    
+    private func showToastMessage(_ message: String) {
+        toastMessage = message
+        showToast = true
+        
+        // Auto-hide after 3 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            self.showToast = false
+        }
+    }
+    
     func toggleBroadcasting() {
         if isAdvertising {
-            stopBroadcasting()
+            stopAllBroadcasting()
         } else {
-            startBroadcasting()
+            startAllBroadcasting()
         }
     }
     
@@ -110,20 +174,83 @@ class BroadcasterViewModel: ObservableObject {
     }
     
     func saveSettings() {
-        savedUUID = uuidString
-        savedMajor = Int(major)
-        savedMinor = Int(minor)
-        savedPower = Int(measuredPower)
+        saveBeacons()
     }
     
     // MARK: - Private Methods
+    
+    private func loadBeacons() {
+        guard let data = savedBeaconsData else { return }
+        
+        do {
+            let decoder = JSONDecoder()
+            var loadedBeacons = try decoder.decode([Beacon].self, from: data)
+            
+            // Disable all beacons on app launch
+            for index in loadedBeacons.indices {
+                loadedBeacons[index].isEnabled = false
+            }
+            
+            beacons = loadedBeacons
+        } catch {
+            print("Failed to load beacons: \(error)")
+        }
+    }
+    
+    private func saveBeacons() {
+        do {
+            let encoder = JSONEncoder()
+            savedBeaconsData = try encoder.encode(beacons)
+        } catch {
+            print("Failed to save beacons: \(error)")
+        }
+    }
+    
+    private func startBroadcastingBeacon(_ beacon: Beacon) {
+        guard let uuid = beacon.beaconUUID else {
+            return
+        }
+        
+        broadcaster.startBroadcastingBeacon(
+            id: beacon.id,
+            uuid: uuid,
+            major: beacon.major,
+            minor: beacon.minor,
+            measuredPower: beacon.measuredPower
+        )
+        
+        updateBroadcastingState()
+    }
+    
+    private func startAllBroadcasting() {
+        for beacon in beacons where beacon.isEnabled {
+            startBroadcastingBeacon(beacon)
+        }
+    }
+    
+    private func stopAllBroadcasting() {
+        broadcaster.stopAllBroadcasting()
+        updateBroadcastingState()
+    }
+    
+    private func updateBroadcastingState() {
+        let activeBeacons = beacons.filter { $0.isEnabled }
+        isAdvertising = !activeBeacons.isEmpty && broadcaster.hasActiveBeacons
+        
+        if isAdvertising {
+            statusMessage = "Broadcasting \(activeBeacons.count) beacon(s)"
+        } else {
+            statusMessage = "Ready"
+        }
+    }
     
     private func startBroadcasting() {
         guard let uuid = UUID(uuidString: uuidString) else {
             return
         }
         
-        broadcaster.startBroadcasting(
+        broadcaster.startBroadcastingBeacon(
+            id: UUID(),
             uuid: uuid,
             major: major,
             minor: minor,
@@ -132,7 +259,7 @@ class BroadcasterViewModel: ObservableObject {
     }
     
     private func stopBroadcasting() {
-        broadcaster.stopBroadcasting()
+        broadcaster.stopAllBroadcasting()
     }
     
     private func setupObservers() {
@@ -162,18 +289,21 @@ class BroadcasterViewModel: ObservableObject {
         
         broadcaster.$bluetoothState
             .assign(to: &$bluetoothState)
+        
+        broadcaster.$currentBroadcastingBeaconId
+            .assign(to: &$currentBroadcastingBeaconId)
     }
     
     @objc private func handleSleepNotification() {
         if isAdvertising {
             shouldRestartAfterSleep = true
-            stopBroadcasting()
+            stopAllBroadcasting()
         }
     }
     
     @objc private func handleWakeNotification() {
         if shouldRestartAfterSleep {
-            startBroadcasting()
+            startAllBroadcasting()
             shouldRestartAfterSleep = false
         }
     }

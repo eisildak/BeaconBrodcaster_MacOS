@@ -13,12 +13,15 @@ struct iBeaconBroadcasterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("Beacon Broadcaster Pro Desktop") {
             ContentView()
                 .onAppear {
                     NSWindow.allowsAutomaticWindowTabbing = false
                 }
-        }.commands {
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 800, height: 650)
+        .commands {
             CommandGroup(replacing: CommandGroupPlacement.newItem, addition: {})
         }
     }
